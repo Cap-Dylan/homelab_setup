@@ -31,3 +31,38 @@ Multi-node, hybrid-architecture homelab optimized for local AI, IoT, and privacy
 - **Long-term plan**: Evaluate migrating HA + Frigate containers directly to NASync (single-box consolidation)
 
 **Status**: NAS UI accessible locally | Shares configured | Ready for HA integration tomorrow
+
+
+## Update – March 15, 2026  
+**Got local AI chat working across machines**
+
+Today I set up OpenwebUI as an AI chat interface that runs on my UGREEN NAS but uses the GPU from my MSI GE76 laptop.
+
+### What I got working:
+- Ollama on GE76 (Ubuntu Server)  
+  - Fixed the service so models show up again  
+  - Made it listen on the whole network (0.0.0.0:11434) instead of just localhost  
+  - Models loaded: llama3.1:8b-instruct-q5_K_M and llama3.2:3b
+
+- Portainer on UGREEN NAS  
+  - Installed via Docker (manual container with socket mount)  
+  - Gives me a web GUI to manage containers on the NAS
+
+- Open WebUI on UGREEN NAS  
+  - Deployed the container using Portainer  
+  - Persistent storage folder: /Shared folder/docker/open-webui  
+  - Connected it to Ollama IP  
+  - Had to manually type the full IP in Open WebUI settings to make it connect  
+  - Tested a chat prompt → response came back using the RTX 2060 GPU
+
+### Quick lessons from today:
+- Always check `sudo ss -tuln | grep ` to confirm Ollama is listening on 0.0.0.0
+- Docker socket mount (/var/run/docker.sock) is required for Portainer
+- Open WebUI sometimes ignores env vars on first boot → manual URL entry in settings fixed it
+
+Next up:  
+- Add more models to Ollama  
+- Explore uploading documents/RAG in Open WebUI
+- Explore fine tuning possibilities 
+
+  
