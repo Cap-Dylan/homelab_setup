@@ -49,3 +49,39 @@
 - [ ] Add monitoring (System Monitor + Glances)
 - [ ] Test ZFS dataset for camera storage
 - [ ] Diagram setup after Tapo integration
+
+
+# Homelab Infrastructure Documentation
+
+**Last updated**: March 14, 2026 (evening)  
+**Author**: Dylan  
+**Purpose**: Current baseline after retiring the legacy Z400 and bringing in the UGREEN NASync DXP2800 as the new primary storage and mini-server node.
+
+## Hardware Inventory
+
+| Device                          | Role                                      | CPU / GPU                              | RAM                  | Storage                                      | OS / Notes                                      | Power Draw (idle) |
+|---------------------------------|-------------------------------------------|----------------------------------------|----------------------|----------------------------------------------|-------------------------------------------------|-------------------|
+| Apple MacBook Pro 14" (M4 Pro)  | Daily driver / Prototyping                | M4 Pro (12C CPU, 16C GPU, 16C NPU)     | 24 GB unified       | 512 GB SSD                                   | macOS                                          | Excellent battery |
+| Custom Liquid-Cooled Tower      | Heavy ML Training & Gaming                | i7-14700 + RTX 4090 24 GB              | 128 GB DDR5         | 1 TB NVMe + 8 TB HDD                         | Windows 11                                     | Sustained loads   |
+| MSI GE76 Raider (headless)      | 24/7 Local AI Inference                   | i7-9750H + RTX 2060 Super 8 GB         | 32 GB               | 500 GB NVMe + 1 TB HDD                       | Ubuntu Server 24.04 LTS                        | ~38–44°C          |
+| Lenovo IdeaPad 1 15IJL7         | Primary HA Server                         | Celeron N4500                          | 36 GB DDR4          | 1 TB NVMe + 120 GB microSD                   | Home Assistant OS (bare-metal)                 | ~10–30 W          |
+| Surface Go 3                    | Planned Kiosk Dashboard                   | Pentium Gold 6500Y                     | 4 GB                | 64 GB eMMC                                   | Windows (kiosk mode planned)                   | Fanless           |
+| ASUS Vivobook 16                | Spare / Future edge device                | i5-1135G7 + Iris Xe                    | 8 GB                | 512 GB NVMe                                  | Ubuntu 24.04 LTS (offline)                     | —                 |
+| UGREEN NASync DXP2800           | Primary NAS & Mini-Server                 | Intel N100 (4C/4T)                     | 8 GB DDR5 (expandable) | 2× Hitachi Deskstar 500 GB (Basic mode) + 2× empty M.2 NVMe | UGOS Pro (App Center + Docker + VMs)           | ~10–25 W          |
+
+**Note**: The old HP Z400 (Proxmox/ZFS) has been retired.
+
+## Compute Roles & Architecture
+- Always-on services: Lenovo (HA) + MSI GE76 (Ollama)
+- Heavy workloads: 4090 tower (PyTorch fine-tuning for phase 9)
+- Portability / prototyping: MacBook M4 Pro
+- Primary storage & apps: UGREEN NASync DXP2800 (new central node)
+- Future: Evaluate migrating HA + Frigate containers directly to NASync
+
+## Decisions & Gotchas (Engineering Notes)
+- Retired Z400 after repeated pve-cluster/pmxcfs failures and legacy hardware frustration
+- Chose UGREEN NASync DXP2800 as modern replacement (Intel N100 mini-server with built-in App Center)
+- Temporarily using two 15-year-old Hitachi Deskstar 500 GB SATA drives for testing (Basic mode, no RAID yet)
+- Discovered UGOS Pro is much more capable than a traditional NAS (Docker apps, VMs, direct HA/Frigate possible)
+- ZFS not natively supported (using Btrfs for now)
+
