@@ -85,3 +85,19 @@
 - Discovered UGOS Pro is much more capable than a traditional NAS (Docker apps, VMs, direct HA/Frigate possible)
 - ZFS not natively supported (using Btrfs for now)
 
+# Infrastructure Update Log
+
+## March 15, 2026 – AI Chat Frontend Live
+- **Open WebUI** now running on **UGREEN NASync DXP2800** (previously only storage)
+  - Container: ghcr.io/open-webui/open-webui:main
+  - Exposed on port 8080
+  - Persistent volume: /Shared folder/docker/open-webui → /app/backend/data
+- **Ollama** on **MSI GE76** exposed to LAN (0.0.0.0:11434)
+  - Systemd override: Environment="OLLAMA_HOST=0.0.0.0"
+  - Models: llama3.1:8b-instruct-q5_K_M (5.7 GB), llama3.2:3b (2.0 GB)
+- **Connection**: Open WebUI queries remote Ollama on GE76
+  - Confirmed GPU inference via nvidia-smi during chat prompts
+- **Management**: Portainer installed on UGREEN for Docker GUI
+- **Tested**: Successful chat prompts from browser → responses generated on GE76 RTX 2060
+
+  
