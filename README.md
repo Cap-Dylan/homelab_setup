@@ -1,15 +1,17 @@
 # homelab_setup
-## Overview of what's currently on station in my homelab
-### Current Homelab Infrastructure (March 2026 Baseline)
 
-Multi-node, hybrid-architecture homelab optimized for local AI, IoT, and privacy-focused smart home development. Designed for low-power 24/7 operation + heavy CUDA workloads.
+A privacy-first, multi-node homelab running fully local AI inference, 
+smart home automation, and IoT experimentation — no cloud dependency. 
+Built on repurposed consumer hardware featuring a dedicated GPU inference 
+server (RTX 2060), a 4090-equipped training rig, self-hosted LLM chat via 
+Open WebUI + Ollama, a local RAG pipeline using nomic-embed-text, and Home 
+Assistant controlling a full Zigbee smart home stack.
 
-**Key Design Principles**  
-- Repurposed hardware for sustainability  
-- Dedicated low-power HA server  
-- GPU-accelerated inference & training separation  
-- ZFS storage + ECC where possible  
-- Modern multi-gig networking with UPS protection
+## Key design principles
+- Everything runs locally — no data leaves the house
+- Repurposed consumer hardware for sustainability
+- Tiered compute — always-on inference separated from heavy training
+- Privacy-first smart home with no cloud-dependent devices
 
 (Full details in [docs/infrastructure.md](docs/infrastructure.md))
 
