@@ -2,79 +2,17 @@
 
 ## Hardware
 
-### MacBook Pro 14" M4 Pro — Daily Driver / Lab Cockpit
-- CPU: M4 Pro (12C CPU, 16C GPU, 16C NPU)
-- RAM: 24GB unified memory
-- Storage: 512GB SSD
-- OS: macOS
-- Role: Primary workstation, SSH cockpit into all nodes, prototyping
+## Hardware
 
-### MSI GE76 Raider — AI Inference Server (Always-On, Jarvis Brain)
-- CPU: i7-9750H
-- GPU: RTX 2060 Super 8GB VRAM
-- RAM: 32GB DDR4
-- Storage: 500GB NVMe + 1TB HDD
-- OS: Ubuntu Server 24.04 LTS (headless)
-- Role: Always-on LLM inference, dedicated Jarvis reasoning engine
-- Services: Ollama on :11434
-- Models: llama3.1:8b-instruct-q5_K_M (primary), llama3.2:3b (lightweight)
-- Monitoring: Node Exporter → Prometheus on Vivobook
-
-### Custom Liquid-Cooled Tower — Heavy ML / Gaming
-- CPU: i7-14700 (20C/28T)
-- GPU: RTX 4090 24GB VRAM
-- RAM: 128GB DDR5
-- Storage: 1TB NVMe + 8TB HDD
-- OS: Windows 11
-- Role: Idle — future PyTorch fine-tuning and 27B model inference
-- Status: Off unless needed, not yet in monitoring stack
-
-### UGREEN NASync DXP2800 — NAS, App Server & NVR
-- CPU: Intel N100 (4C/4T, QuickSync capable)
-- RAM: 8GB DDR5
-- Storage: 2x Hitachi Deskstar 500GB SATA (RAID1 planned when new drives arrive)
-- OS: UGOS Pro
-- Role: Central storage, Docker host, Frigate NVR
-- Services:
-  - Portainer (Docker GUI)
-  - Node Exporter (Docker, network_mode: host)
-  - Frigate NVR — Tapo C121 RTSP, QuickSync decode, 1280x720 @ 5fps,
-    MQTT → HA, 7 day retention, ~19% CPU / ~36% RAM steady state
-- Notes: Btrfs, no RAID yet, RAID1 planned for incoming drives
-
-### Lenovo IdeaPad 1 15IJL7 — Home Assistant Server
-- CPU: Celeron N4500 (2C/2T)
-- RAM: 36GB DDR4
-- Storage: 1TB NVMe + 120GB microSD
-- OS: Home Assistant OS (bare-metal)
-- Role: Dedicated smart home hub, MQTT broker
-- Services: Home Assistant, Zigbee2MQTT, Mosquitto, HACS,
-  Prometheus Node Exporter add-on (port 9100)
-- Integrations: Frigate (HACS), Zigbee devices, Wiz bulbs, Tapo C121
-- Devices: ThirdReality Zigbee motion sensors, Wiz smart bulbs, Tapo C121
-- Automations:
-  - Jarvis Person Detected — occupancy → detected: fires rest_command.notify_jarvis
-  - Jarvis Occupancy Cleared — occupancy → off: fires rest_command.notify_jarvis_clear
-- Power draw: ~10–30W idle, always on
-
-### ASUS Vivobook 16 — Infrastructure & Orchestration Node
-- CPU: i5-1135G7 / Intel Iris Xe
-- RAM: 8GB DDR4
-- Storage: 512GB NVMe
-- OS: Ubuntu 24.04 LTS (headless), sleep permanently disabled
-- Role: Always-on infrastructure, observability, and Jarvis orchestration
-- Services:
-  - AdGuard Home — DNS sinkhole, ports 53/80
-  - Prometheus — port 9090, 15s scrape, 30 day retention
-  - Grafana — port 3001, Node Exporter Full (ID 1860), all four nodes
-  - Node Exporter — host metrics
-  - FastAPI Ollama Wrapper — /health, /ask, /summarize on :8000
-  - Jarvis Agent — Flask webhook on :5050, systemd managed
-
-### Surface Go 3 — Planned HA Kiosk
-- CPU: Pentium Gold 6500Y / 4GB RAM / 64GB eMMC
-- OS: Windows (kiosk mode planned)
-- Role: Wall-mounted HA dashboard — not yet configured
+| Node | Role | CPU | GPU | RAM | Storage | OS |
+|------|------|-----|-----|-----|---------|-----|
+| MacBook Pro 14" M4 Pro | Daily Driver / Lab Cockpit | M4 Pro (12C CPU, 16C GPU) | 16C GPU (unified) | 24GB unified | 512GB SSD | macOS |
+| MSI GE76 Raider | AI Inference — Always-On Jarvis Brain | i7-9750H | RTX 2060 Super 8GB | 32GB DDR4 | 500GB NVMe + 1TB HDD | Ubuntu Server 24.04 LTS |
+| Custom Tower | Heavy ML / Gaming — Idle | i7-14700 (20C/28T) | RTX 4090 24GB | 128GB DDR5 | 1TB NVMe + 8TB HDD | Windows 11 |
+| UGREEN NASync DXP2800 | NAS, App Server, NVR | Intel N100 (4C/4T) | Intel QuickSync | 8GB DDR5 | 2x 500GB SATA (RAID1 planned) | UGOS Pro |
+| Lenovo IdeaPad 1 | Home Assistant Server | Celeron N4500 (2C/2T) | — | 36GB DDR4 | 1TB NVMe + 120GB microSD | Home Assistant OS |
+| ASUS Vivobook 16 | Infrastructure & Orchestration | i5-1135G7 | Intel Iris Xe | 8GB DDR4 | 512GB NVMe | Ubuntu 24.04 LTS |
+| Surface Go 3 | Planned HA Kiosk | Pentium Gold 6500Y | — | 4GB | 64GB eMMC | Windows |
 
 ---
 
