@@ -6,7 +6,7 @@
 
 | Node | Role | CPU | GPU | RAM | Storage | OS |
 |------|------|-----|-----|-----|---------|-----|
-| MacBook Pro 14" M4 Pro | Daily Driver / Lab Cockpit | M4 Pro (12C CPU, 16C GPU) | 16C GPU (unified) | 24GB unified | 512GB SSD | macOS |
+| MacBook Pro 14" M4 Pro | Daily Driver / Lab Cockpit | M4 Pro (12C CPU, 16C NPU) | 16C GPU (unified) | 24GB unified | 512GB SSD | macOS |
 | MSI GE76 Raider | AI Inference — Always-On Jarvis Brain | i7-9750H | RTX 2060 Super 8GB | 32GB DDR4 | 500GB NVMe + 1TB HDD | Ubuntu Server 24.04 LTS |
 | Custom Tower | Heavy ML / Gaming — Idle | i7-14700 (20C/28T) | RTX 4090 24GB | 128GB DDR5 | 1TB NVMe + 8TB HDD | Windows 11 |
 | UGREEN NASync DXP2800 | NAS, App Server, NVR | Intel N100 (4C/4T) | Intel QuickSync | 8GB DDR5 | 2x 500GB SATA (RAID1 planned) | UGOS Pro |
