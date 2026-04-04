@@ -1,7 +1,7 @@
 import requests
 
-HA_URL = "http://192.168.0.59:8123"
-TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI3NGU0MzZhNGI0YzA0OWFjYTAyN2NlNDBmNjQwMjFjNyIsImlhdCI6MTc3NTI4MTQwMCwiZXhwIjoyMDkwNjQxNDAwfQ.UA1LqJLGOcXd9RT7329ahnAKEkYsctdN53muBg9Rn-k"
+HA_URL = "http: your IP :8123"
+TOKEN = "your token"
 
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
