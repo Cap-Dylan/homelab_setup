@@ -58,3 +58,29 @@ harmless — Tapo firmware quirk, Frigate handles it fine.
 - [ ] Configure frigate.yml with RTSP URL and N100 QuickSync decode
 - [ ] Verify detections surfacing in Frigate web UI
 - [ ] Connect Frigate to Home Assistant via native integration
+
+## Update – April 3, 2026
+
+**Frigate → Home Assistant integration complete**
+
+### What was configured:
+- Deployed Frigate container on UGREEN NASync via Portainer
+- Enabled MQTT in frigate config pointing at Mosquitto broker on HA (Lenovo)
+- Installed HACS on Home Assistant
+- Installed Frigate integration via HACS
+- All sensors reporting in HA: motion, person count, occupancy, review status
+
+### Gotchas:
+- Frigate integration requires HACS — not available in default HA integration store
+- Mosquitto requires auth — Frigate config needs explicit mqtt user/password
+- Detection resolution dropped from 2560x1440 → 1280x720 for CPU detector performance
+- SEI type 764 warnings in ffmpeg output are harmless Tapo firmware quirk
+
+### NAS resource usage with Frigate running (N100):
+- CPU: ~18%
+- RAM: ~37%
+- Comfortable headroom remaining
+
+### config.example.yml
+See config.example.yml for full Frigate configuration template.
+Real config lives at ~/frigate/config/config.yml on the NAS (gitignored).

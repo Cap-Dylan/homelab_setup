@@ -1,0 +1,34 @@
+mqtt:
+  enabled: true
+  host: <ha-ip>
+  port: 1883
+  user: <mqtt-username>
+  password: <mqtt-password>
+
+cameras:
+  tapo_c121:
+    ffmpeg:
+      inputs:
+        - path: rtsp://<username>:<password>@[REDACTED]:554/stream1
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 1280
+      height: 720
+      fps: 5
+
+detectors:
+  cpu:
+    type: cpu
+
+record:
+  enabled: true
+  retain:
+    days: 7
+
+snapshots:
+  enabled: true
+  retain:
+    default: 7
