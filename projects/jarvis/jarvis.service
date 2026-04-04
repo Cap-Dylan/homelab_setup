@@ -1,0 +1,13 @@
+[Unit]
+Description=Jarvis Smart Home Agent
+After=network.target
+
+[Service]
+User=tortellini
+WorkingDirectory=/home/tortellini/homelab_setup/projects/jarvis
+ExecStart=/home/tortellini/.pyenv/versions/3.11.9/bin/python webhook.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
