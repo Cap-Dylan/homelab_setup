@@ -4,7 +4,7 @@ import os
 
 app = FastAPI()
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://192.168.0.32:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "REDACTED")
 
 @app.get("/health")
 def health():
