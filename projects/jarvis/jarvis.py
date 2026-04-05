@@ -1,3 +1,4 @@
+from decision_log import log_decision
 import json
 from datetime import datetime
 from ha_client import get_state, call_service
@@ -43,6 +44,7 @@ Respond with ONLY a JSON object in this exact format, no other text:
         print(f"Action: {decision['action']}")
         print(f"Brightness: {decision.get('brightness')}")
         print(f"Reason: {decision['reason']}")
+        log_decision(event=event, reasoning=decision['reason'], action=decision['action'], details={"brightness": decision.get("brightness")})
 
         if decision['action'] == "turn_on":
             call_service("light", "turn_on", "light.wiz_rgbww_tunable_a480ec", brightness=decision.get("brightness"))
