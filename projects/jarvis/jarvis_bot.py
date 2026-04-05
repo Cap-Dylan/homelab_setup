@@ -1,21 +1,20 @@
 """
-jarvis_bot.py — Jarvis Matrix Chat Interface
+jarvis_bot.py — Jarvis Matrix Chat Interface (v3 — Unified 8b Brain)
 
-A Matrix bot that lets you talk to Jarvis from Element.
-Runs on the Vivobook alongside jarvis.py.
+One model handles everything: conversation, commands, and reasoning.
+You talk naturally, Jarvis decides if it needs to act or just respond.
 
-Commands:
-    !ask <question>   Chat with Jarvis (sends to Ollama on MSI)
-    !why              Show recent Jarvis decisions and reasoning
-    !why <number>     Show last N decisions (default 5, max 20)
-    !status           Check current smart home light states
-    !help             Show available commands
+"turn off the living room light" → executes it and confirms
+"why did you turn on the light at 8pm?" → reasons about its decision log
+"what's up?" → just chats
+
+Shortcuts still work:
+    !status — quick light states (no LLM needed)
+    !help   — show available commands
 
 Setup:
-    1. Set environment variable: export JARVIS_MATRIX_PASSWORD="your-password"
-    2. Run: python3 jarvis_bot.py
-
-All AI reasoning stays local — Matrix messages stay on your Conduwuit server.
+    1. export JARVIS_MATRIX_PASSWORD="Stonebear96"
+    2. python3 jarvis_bot.py
 """
 
 import os
@@ -23,65 +22,124 @@ import sys
 import json
 import asyncio
 import requests
-from nio import AsyncClient, RoomMessageText, LoginResponse
+from datetime import datetime
+from nio import AsyncClient, LoginResponse, RoomMessageText
 
 # ---------------------------------------------------------------------------
-# Configuration — all your service addresses
+# Configuration
 # ---------------------------------------------------------------------------
 
-# Conduwuit on the MSI (Matrix server)
 MATRIX_HOMESERVER = "http://100.77.80.94:6167"
 MATRIX_USER = "@jarvis:100.77.80.94"
 MATRIX_PASSWORD = os.environ.get("JARVIS_MATRIX_PASSWORD", "")
 
-# The Jarvis chat room you created in Element
 JARVIS_ROOM_ID = "!3toinz8WHv4l0hMrHV:100.77.80.94"
 
-# Ollama on the MSI (Jarvis brain)
+# Ollama on the MSI — one model for everything
 OLLAMA_HOST = "http://100.77.80.94:11434"
 JARVIS_MODEL = "llama3.1:8b-instruct-q5_K_M"
 
-# Home Assistant on the Lenovo (same LAN)
+# Home Assistant
 HA_HOST = "http://192.168.0.59:8123"
 HA_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI3NGU0MzZhNGI0YzA0OWFjYTAyN2NlNDBmNjQwMjFjNyIsImlhdCI6MTc3NTI4MTQwMCwiZXhwIjoyMDkwNjQxNDAwfQ.UA1LqJLGOcXd9RT7329ahnAKEkYsctdN53muBg9Rn-k"
+HA_HEADERS = {
+    "Authorization": f"Bearer {HA_TOKEN}",
+    "Content-Type": "application/json",
+}
 
-# Lights to show in !status
-TRACKED_LIGHTS = [
-    "light.wiz_rgbww_tunable_a480ec",  # Living room (Jarvis-controlled)
-    "light.wiz_rgbww_tunable_225a0a",  # Lab
-]
+# Entities Jarvis knows about and can control
+KNOWN_ENTITIES = {
+    "living room light": "light.wiz_rgbww_tunable_a480ec",
+    "lab light": "light.wiz_rgbww_tunable_225a0a",
+}
 
-# Path to the decision log (same folder as jarvis.py)
 DECISIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decisions.jsonl")
 
+# Conversation memory (resets on restart)
+conversation_history = []
+MAX_HISTORY = 10
+
 
 # ---------------------------------------------------------------------------
-# Helper functions — talk to your local services
+# Home Assistant helpers
 # ---------------------------------------------------------------------------
 
-def ask_ollama(prompt):
-    """Send a prompt to Ollama on the MSI and get a response."""
+def get_all_light_states():
+    """Get current state of all tracked lights. Returns a readable string."""
+    summary = ""
+    for name, entity_id in KNOWN_ENTITIES.items():
+        try:
+            resp = requests.get(
+                f"{HA_HOST}/api/states/{entity_id}",
+                headers=HA_HEADERS,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            state = data.get("state", "unknown")
+            brightness_raw = data.get("attributes", {}).get("brightness")
+            if brightness_raw is not None:
+                brightness_pct = round((brightness_raw / 255) * 100)
+                summary += f"- {name}: {state} (brightness: {brightness_pct}%)\n"
+            else:
+                summary += f"- {name}: {state}\n"
+        except Exception as e:
+            summary += f"- {name}: error ({e})\n"
+    return summary
+
+
+def execute_action(action):
+    """
+    Execute a single action dict from the LLM.
+    Expected format: {"action": "turn_on"/"turn_off", "entity": "living room light", "brightness": 150}
+    Returns a string describing what happened.
+    """
+    action_type = action.get("action", "").lower()
+    entity_name = action.get("entity", "").lower()
+    brightness = action.get("brightness")
+
+    # Resolve friendly name to entity_id
+    entity_id = KNOWN_ENTITIES.get(entity_name)
+    if not entity_id:
+        return f"I don't know how to control '{entity_name}'. I can control: {', '.join(KNOWN_ENTITIES.keys())}"
+
     try:
-        resp = requests.post(
-            f"{OLLAMA_HOST}/api/generate",
-            json={
-                "model": JARVIS_MODEL,
-                "prompt": prompt,
-                "stream": False,
-            },
-            timeout=120,
-        )
-        resp.raise_for_status()
-        return resp.json().get("response", "No response from Ollama.")
-    except requests.exceptions.ConnectionError:
-        return "Can't reach Ollama on the MSI. Is it running?"
-    except requests.exceptions.Timeout:
-        return "Ollama timed out — the model might be loading."
+        if action_type == "turn_on":
+            payload = {"entity_id": entity_id}
+            if brightness is not None:
+                payload["brightness"] = int(brightness)
+            resp = requests.post(
+                f"{HA_HOST}/api/services/light/turn_on",
+                headers=HA_HEADERS,
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            bri_str = f" at {brightness}/255" if brightness else ""
+            return f"Turned on {entity_name}{bri_str}"
+
+        elif action_type == "turn_off":
+            resp = requests.post(
+                f"{HA_HOST}/api/services/light/turn_off",
+                headers=HA_HEADERS,
+                json={"entity_id": entity_id},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return f"Turned off {entity_name}"
+
+        else:
+            return f"Unknown action type: {action_type}"
+
     except Exception as e:
-        return f"Error talking to Ollama: {e}"
+        return f"Failed to execute {action_type} on {entity_name}: {e}"
 
 
-def get_recent_decisions(n=5):
+# ---------------------------------------------------------------------------
+# Decision log
+# ---------------------------------------------------------------------------
+
+def get_recent_decisions(n=10):
     """Read the last N decisions from the JSONL log."""
     if not os.path.exists(DECISIONS_FILE):
         return []
@@ -98,148 +156,180 @@ def get_recent_decisions(n=5):
             decisions.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-
     return decisions
 
 
-def get_ha_entity_state(entity_id):
-    """Get current state of a Home Assistant entity."""
+def log_decision(event, reasoning, action, details=None):
+    """Log a decision from a chat command."""
+    entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "event": event,
+        "reasoning": reasoning,
+        "action": action,
+    }
+    if details:
+        entry["details"] = details
+
+    with open(DECISIONS_FILE, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Core: ask the 8b to reason and (optionally) act
+# ---------------------------------------------------------------------------
+
+def ask_jarvis(user_message):
+    """
+    Send a message to the 8b model with full context.
+    Returns (response_text, actions_executed).
+    """
+    global conversation_history
+
+    # Gather context
+    light_states = get_all_light_states()
+    hour = datetime.now().hour
+    time_str = datetime.now().strftime("%I:%M %p")
+
+    # Decision log context
+    decisions = get_recent_decisions(10)
+    decision_context = ""
+    if decisions:
+        decision_context = "My recent decision log (newest last):\n"
+        for d in decisions:
+            decision_context += (
+                f"  [{d.get('timestamp')}] event={d.get('event')} "
+                f"action={d.get('action')} reason=\"{d.get('reasoning')}\"\n"
+            )
+
+    # Conversation history
+    history_str = ""
+    if conversation_history:
+        for entry in conversation_history[-MAX_HISTORY:]:
+            history_str += f"User: {entry['user']}\nJarvis: {entry['jarvis']}\n"
+
+    prompt = f"""You are Jarvis, an AI smart home assistant running fully locally on a private homelab.
+You have direct control over the smart home via Home Assistant.
+
+CURRENT STATE:
+- Time: {time_str} (hour {hour})
+- Lights:
+{light_states}
+
+{decision_context}
+
+AVAILABLE ACTIONS:
+You can control these devices:
+- "living room light" — turn_on (with brightness 0-255) or turn_off
+- "lab light" — turn_on (with brightness 0-255) or turn_off
+
+Brightness guide for context:
+- Morning (6-9): 180
+- Daytime (9-17): 255
+- Evening (17-21): 150
+- Night (21-6): 80
+
+RESPONSE FORMAT:
+Always respond with a JSON object. Nothing else — no markdown, no backticks, just the JSON.
+
+If the user is asking you to DO something (control a light, change brightness, etc.):
+{{"response": "your conversational response", "actions": [{{"action": "turn_on" or "turn_off", "entity": "living room light" or "lab light", "brightness": 0-255}}]}}
+
+If the user is just chatting or asking a question (why did you do X, what's going on, etc.):
+{{"response": "your conversational response"}}
+
+CONVERSATION RULES:
+- Be conversational and natural, not robotic
+- When asked WHY you did something, look at your decision log and explain your actual reasoning in your own words — don't just list log entries
+- When asked to control something, do it and confirm naturally
+- If you're not sure what the user wants, ask for clarification
+- Keep responses concise but thoughtful
+
+{history_str}User: {user_message}
+Jarvis:"""
+
     try:
-        resp = requests.get(
-            f"{HA_HOST}/api/states/{entity_id}",
-            headers={
-                "Authorization": f"Bearer {HA_TOKEN}",
-                "Content-Type": "application/json",
+        resp = requests.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": JARVIS_MODEL,
+                "prompt": prompt,
+                "stream": False,
             },
-            timeout=10,
+            timeout=120,
         )
         resp.raise_for_status()
-        return resp.json()
+        raw_response = resp.json().get("response", "").strip()
+    except requests.exceptions.ConnectionError:
+        return ("Can't reach Ollama on the MSI. Is it running?", [])
+    except requests.exceptions.Timeout:
+        return ("Ollama timed out — the model might be loading.", [])
     except Exception as e:
-        return {"state": "error", "error": str(e)}
+        return (f"Error talking to Ollama: {e}", [])
 
+    # Parse the JSON response
+    try:
+        # Clean up common LLM quirks — sometimes it wraps in backticks
+        cleaned = raw_response.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.endswith("```"):
+            cleaned = cleaned.rsplit("```", 1)[0]
+        cleaned = cleaned.strip()
 
-# ---------------------------------------------------------------------------
-# Command handlers — each one processes a command and returns a string
-# ---------------------------------------------------------------------------
+        parsed = json.loads(cleaned)
+        response_text = parsed.get("response", raw_response)
+        actions = parsed.get("actions", [])
+    except json.JSONDecodeError:
+        # If the LLM didn't return valid JSON, just use the raw text as conversation
+        response_text = raw_response
+        actions = []
 
-def handle_help():
-    """Return the help text."""
-    return (
-        "Jarvis Commands:\n\n"
-        "!ask <question> — Chat with Jarvis (local Ollama)\n"
-        "!why — See recent decisions + reasoning\n"
-        "!why <number> — Show last N decisions (default 5)\n"
-        "!status — Check current light states\n"
-        "!help — Show this message"
-    )
+    # Execute any actions
+    action_results = []
+    for action in actions:
+        result = execute_action(action)
+        action_results.append(result)
 
-
-def handle_why(args):
-    """Return recent Jarvis decisions."""
-    # Parse optional count
-    count = 5
-    if args:
-        try:
-            count = min(int(args), 20)
-        except ValueError:
-            pass
-
-    decisions = get_recent_decisions(count)
-
-    if not decisions:
-        return "No decisions logged yet. Jarvis hasn't acted since logging was enabled."
-
-    response = f"Last {len(decisions)} decision(s):\n\n"
-    for d in decisions:
-        timestamp = d.get("timestamp", "unknown")
-        event = d.get("event", "unknown")
-        reasoning = d.get("reasoning", "no reasoning recorded")
-        action = d.get("action", "no action")
-        details = d.get("details", {})
-
-        brightness = details.get("brightness", "N/A") if details else "N/A"
-
-        response += (
-            f"[{timestamp}] {event}\n"
-            f"  Why: {reasoning}\n"
-            f"  Did: {action} (brightness: {brightness})\n\n"
+        # Log the action
+        log_decision(
+            event="chat_command",
+            reasoning=response_text,
+            action=f"{action.get('action')} {action.get('entity', 'unknown')}",
+            details={"brightness": action.get("brightness"), "source": "matrix_chat"},
         )
 
-    return response.strip()
+    # Store in conversation history
+    conversation_history.append({
+        "user": user_message,
+        "jarvis": response_text,
+    })
+    if len(conversation_history) > MAX_HISTORY:
+        conversation_history = conversation_history[-MAX_HISTORY:]
 
-
-def handle_status():
-    """Return current light states from HA."""
-    response = "Smart Home Status:\n\n"
-
-    for entity_id in TRACKED_LIGHTS:
-        state_data = get_ha_entity_state(entity_id)
-
-        if "error" in state_data:
-            response += f"  {entity_id}: Error — {state_data['error']}\n"
-            continue
-
-        friendly_name = state_data.get("attributes", {}).get("friendly_name", entity_id)
-        state = state_data.get("state", "unknown")
-        brightness_raw = state_data.get("attributes", {}).get("brightness")
-
-        # HA brightness is 0-255, convert to percentage
-        if brightness_raw is not None:
-            brightness_pct = round((brightness_raw / 255) * 100)
-            brightness_str = f"{brightness_pct}%"
-        else:
-            brightness_str = "N/A"
-
-        indicator = "ON" if state == "on" else "OFF"
-        response += f"  [{indicator}] {friendly_name} — brightness: {brightness_str}\n"
-
-    return response.strip()
-
-
-def handle_ask(question):
-    """Send a question to Ollama with recent decision context."""
-    # Include recent decisions so Jarvis can reference its own history
-    decisions = get_recent_decisions(3)
-    context = ""
-    if decisions:
-        context = "Here are my recent smart home decisions:\n"
-        for d in decisions:
-            context += (
-                f"- {d.get('timestamp')}: {d.get('event')} -> "
-                f"{d.get('action')} (reason: {d.get('reasoning')})\n"
-            )
-        context += "\n"
-
-    prompt = (
-        "You are Jarvis, a local smart home AI assistant running on a private homelab. "
-        "You control lights based on occupancy and time of day. "
-        "You run fully locally with no cloud dependencies. "
-        "Answer the user's question conversationally and concisely.\n\n"
-        f"{context}"
-        f"User: {question}\n"
-        "Jarvis:"
-    )
-
-    return ask_ollama(prompt)
+    return (response_text, action_results)
 
 
 # ---------------------------------------------------------------------------
-# Matrix bot — connects to Conduwuit and listens for messages
+# Quick status (no LLM needed)
+# ---------------------------------------------------------------------------
+
+def handle_status():
+    """Direct HA query, no inference required."""
+    states = get_all_light_states()
+    return f"Smart Home Status:\n\n{states}"
+
+
+# ---------------------------------------------------------------------------
+# Matrix bot
 # ---------------------------------------------------------------------------
 
 async def main():
-    """Main bot loop — connect, sync, and handle messages."""
-
     if not MATRIX_PASSWORD:
         print("ERROR: Set JARVIS_MATRIX_PASSWORD environment variable")
-        print("  export JARVIS_MATRIX_PASSWORD='your-password-here'")
         sys.exit(1)
 
-    # Create the Matrix client
     client = AsyncClient(MATRIX_HOMESERVER, MATRIX_USER)
 
-    # Log in
     print(f"Logging in as {MATRIX_USER}...")
     login_response = await client.login(MATRIX_PASSWORD)
 
@@ -247,71 +337,67 @@ async def main():
         print(f"Login failed: {login_response}")
         sys.exit(1)
 
-    print(f"Logged in successfully. Device ID: {login_response.device_id}")
+    print(f"Logged in. Device ID: {login_response.device_id}")
 
-    # Do an initial sync so we don't respond to old messages
-    print("Running initial sync (ignoring old messages)...")
+    # Initial sync — skip old messages
+    print("Initial sync...")
     await client.sync(timeout=10000)
-    print("Initial sync done. Listening for new messages...")
+    print("Listening for messages...")
 
-    # Register the message handler AFTER initial sync
-    # This way we only respond to messages that arrive from now on
     async def message_callback(room, event):
-        """Called every time a message appears in a room we're in."""
-
-        # Only respond in the Jarvis room
+        """Handle every message in the Jarvis room."""
         if room.room_id != JARVIS_ROOM_ID:
             return
-
-        # Don't respond to our own messages
         if event.sender == MATRIX_USER:
             return
 
         content = event.body.strip()
+        lower = content.lower()
 
-        # Route to the right handler
-        if content.lower() == "!help":
-            response = handle_help()
-
-        elif content.lower().startswith("!why"):
-            args = content[4:].strip()
-            response = handle_why(args)
-
-        elif content.lower().startswith("!status"):
-            response = handle_status()
-
-        elif content.lower().startswith("!ask "):
-            question = content[5:].strip()
-            if not question:
-                response = "Usage: !ask <your question>"
-            else:
-                # Run the Ollama call in a thread so we don't block
-                response = await asyncio.to_thread(handle_ask, question)
-
-        else:
-            # If it's not a command, ignore it (or treat everything as !ask)
-            # Uncomment the next line if you want Jarvis to respond to ALL messages:
-            # response = await asyncio.to_thread(handle_ask, content)
+        # Quick shortcuts that don't need LLM
+        if lower == "!help":
+            response = (
+                "Just talk to me — no commands needed.\n\n"
+                "I can control the living room light and lab light.\n"
+                "Ask me why I did something and I'll explain my reasoning.\n\n"
+                "Shortcuts:\n"
+                "  !status — quick light states\n"
+                "  !help — this message"
+            )
+            await client.room_send(
+                room_id=JARVIS_ROOM_ID,
+                message_type="m.room.message",
+                content={"msgtype": "m.text", "body": response},
+            )
             return
 
-        # Send the response back to the room
-        # Truncate if too long (Matrix has a ~65KB limit but let's keep it readable)
-        if len(response) > 4000:
-            response = response[:4000] + "\n\n... (truncated)"
+        if lower.startswith("!status"):
+            response = handle_status()
+            await client.room_send(
+                room_id=JARVIS_ROOM_ID,
+                message_type="m.room.message",
+                content={"msgtype": "m.text", "body": response},
+            )
+            return
+
+        # Everything else goes to the 8b
+        response_text, action_results = await asyncio.to_thread(ask_jarvis, content)
+
+        # Build the message to send back
+        message = response_text
+        if action_results:
+            message += "\n\n" + "\n".join(f"[executed] {r}" for r in action_results)
+
+        if len(message) > 4000:
+            message = message[:4000] + "\n\n... (truncated)"
 
         await client.room_send(
             room_id=JARVIS_ROOM_ID,
             message_type="m.room.message",
-            content={
-                "msgtype": "m.text",
-                "body": response,
-            },
+            content={"msgtype": "m.text", "body": message},
         )
 
-    # Register the callback
     client.add_event_callback(message_callback, RoomMessageText)
-
-    # Sync forever — this keeps the bot running and listening
     await client.sync_forever(timeout=30000)
 
 
