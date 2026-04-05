@@ -115,8 +115,8 @@ model has the full log as context and can reason about its own behavior conversa
 ## Gotchas
 
 - Ollama on the MSI must be listening on 0.0.0.0:11434, not localhost
-- The 8b model runs at 100% GPU utilization during inference — requests queue up
-  if Frigate and chat fire simultaneously, but the MSI handles it fine (0.6% CPU idle, 7.8% RAM)
+- The 8b model runs at +75% GPU utilization during inference — requests queue up
+  if Frigate and chat fire simultaneously, but the MSI handles it fine (78.89% VRAM, 0.6% CPU idle, 7.8% RAM)
 - HA long-lived access tokens don't expire for years but need manual creation
   in HA UI under Profile → Security
 - Matrix room must have encryption OFF — the bot uses `matrix-nio` without
