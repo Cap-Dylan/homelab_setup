@@ -4,54 +4,99 @@ from datetime import datetime
 from ha_client import get_state, call_service
 from ollama_client import ask_ollama
 
+def get_brightness(hour):
+    """Deterministic brightness lookup — no LLM needed."""
+    if 6 <= hour < 9:
+        return 180
+    elif 9 <= hour < 17:
+        return 255
+    elif 17 <= hour < 21:
+        return 150
+    else:
+        return 80
+
+def get_color_temp(hour, weather):
+    """Ask Jarvis only for color temperature reasoning."""
+    prompt = f"""You control a living room light's color temperature.
+Current hour (24h): {hour}
+Current weather: {weather}
+
+Color temperature guide (Kelvin, range 2000-6500):
+- Clear/sunny daytime: 4000-5000 Kelvin (cool white)
+- Overcast/rainy: 2700-3200 Kelvin (warm white)
+- Evening: 2500-3000 Kelvin (warm)
+- Night/clear-night: 2200-2700 Kelvin (very warm)
+
+Respond with ONLY a JSON object, no other text:
+{{"color_temp_kelvin": 2000-6500, "reason": "one sentence explanation"}}"""
+
+    response = ask_ollama(prompt)
+    try:
+        result = json.loads(response)
+        return (
+            result.get("color_temp_kelvin", 3000),
+            result.get("reason", "")
+        )
+    except json.JSONDecodeError:
+        return 3000, "LLM response failed, using default"
+
 def run_jarvis(event_data=None):
-    camera_state = get_state("camera.tapo_c121")
     light_state = get_state("light.wiz_rgbww_tunable_a480ec")
+    weather = get_state("weather.forecast_home")
     event = event_data.get("event", "unknown") if event_data else "unknown"
     hour = datetime.now().hour
 
-    prompt = f"""You are a smart home assistant controlling a living room.
+    # --- Hardcoded decision logic ---
+    light_is_on = light_state == "on"
 
-Current state:
-- Camera occupancy: {camera_state}
-- Living room light: {light_state}
-- Event that triggered this: {event}
-- Current hour (24h): {hour}
+    if event == "occupancy_cleared":
+        action = "turn_off"
+        brightness = None
+        color_temp = None
+        reason = "Occupancy cleared — turning off"
 
-Available actions:
-- turn_on the living room light
-- turn_off the living room light
-- do_nothing
+    elif event == "person_detected" and not light_is_on:
+        action = "turn_on"
+        brightness = get_brightness(hour)
+        color_temp, reason = get_color_temp(hour, weather)
 
-Rules:
-- If event is "person_detected" and light is off, turn it on
-- if event is "occupancy_cleared", always turn the light off
-- If event is "person_detected" and light is on, do_nothing
+    elif event == "person_detected" and light_is_on:
+        action = "do_nothing"
+        brightness = None
+        color_temp = None
+        reason = "Person detected, light already on"
 
-Brightness guide:
-- Morning (6-9): 180
-- Daytime (9-17): 255
-- Evening (17-21): 150
-- Night (21-6): 80
+    else:
+        action = "do_nothing"
+        brightness = None
+        color_temp = None
+        reason = f"Unhandled event: {event}"
 
-Respond with ONLY a JSON object in this exact format, no other text:
-{{"action": "turn_on" or "turn_off" or "do_nothing", "brightness": 0-255, "reason": "one sentence explanation"}}"""
+    # --- Execute and log ---
+    print(f"Action: {action}")
+    print(f"Brightness: {brightness}")
+    print(f"Color temp: {color_temp}")
+    print(f"Weather: {weather}")
+    print(f"Reason: {reason}")
 
-    response = ask_ollama(prompt)
+    log_decision(
+        event=event,
+        reasoning=reason,
+        action=action,
+        details={
+            "brightness": brightness,
+            "color_temp_kelvin": color_temp,
+            "weather": weather
+        }
+    )
 
-    try:
-        decision = json.loads(response)
-        print(f"Action: {decision['action']}")
-        print(f"Brightness: {decision.get('brightness')}")
-        print(f"Reason: {decision['reason']}")
-        log_decision(event=event, reasoning=decision['reason'], action=decision['action'], details={"brightness": decision.get("brightness")})
-
-        if decision['action'] == "turn_on":
-            call_service("light", "turn_on", "light.wiz_rgbww_tunable_a480ec", brightness=decision.get("brightness"))
-        elif decision['action'] == "turn_off":
-            call_service("light", "turn_off", "light.wiz_rgbww_tunable_a480ec")
-        else:
-            print("No action taken.")
-
-    except json.JSONDecodeError:
-        print(f"Jarvis returned unexpected format: {response}")
+    if action == "turn_on":
+        call_service("light", "turn_on",
+                     "light.wiz_rgbww_tunable_a480ec",
+                     brightness=brightness,
+                     color_temp_kelvin=color_temp)
+    elif action == "turn_off":
+        call_service("light", "turn_off",
+                     "light.wiz_rgbww_tunable_a480ec")
+    else:
+        print("No action taken.")
