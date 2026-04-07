@@ -229,13 +229,15 @@ Brightness guide for context:
 - Night (21-6): 80
 
 RESPONSE FORMAT:
-Always respond with a JSON object. Nothing else — no markdown, no backticks, just the JSON.
+Always respond with a SINGLE JSON object. Nothing else — no markdown, no backticks, no multiple objects, just ONE JSON object.
 
 If the user is asking you to DO something (control a light, change brightness, etc.):
 {{"response": "your conversational response", "actions": [{{"action": "turn_on" or "turn_off", "entity": "living room light" or "lab light", "brightness": 0-255}}]}}
 
 If the user is just chatting or asking a question (why did you do X, what's going on, etc.):
 {{"response": "your conversational response"}}
+
+CRITICAL: Put "response" and "actions" in the SAME JSON object. Never split them into separate objects.
 
 CONVERSATION RULES:
 - Be conversational and natural, not robotic
@@ -268,7 +270,6 @@ Jarvis:"""
 
     # Parse the JSON response
     try:
-        # Clean up common LLM quirks — sometimes it wraps in backticks
         cleaned = raw_response.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[-1]
@@ -280,9 +281,18 @@ Jarvis:"""
         response_text = parsed.get("response", raw_response)
         actions = parsed.get("actions", [])
     except json.JSONDecodeError:
-        # If the LLM didn't return valid JSON, just use the raw text as conversation
+        # Fallback: try to find multiple JSON objects the LLM split apart
         response_text = raw_response
         actions = []
+        try:
+            for chunk in raw_response.replace("}\n{", "}|||{").replace("} {", "}|||{").split("|||"):
+                part = json.loads(chunk.strip())
+                if "response" in part:
+                    response_text = part["response"]
+                if "actions" in part:
+                    actions = part["actions"]
+        except (json.JSONDecodeError, Exception):
+            pass
 
     # Execute any actions
     action_results = []
