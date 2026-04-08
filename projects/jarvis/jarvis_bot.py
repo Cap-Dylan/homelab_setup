@@ -41,6 +41,19 @@ JARVIS_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b-instruct-q5_K_M")
 HA_HOST = os.environ.get("HA_URL", "http://192.168.0.59:8123")
 HA_TOKEN = os.environ["HA_TOKEN"]
 
+HA_HEADERS = {
+    "Authorization": f"Bearer {HA_TOKEN}",
+    "Content-Type": "application/json",
+}
+
+# Entities Jarvis knows about and can control
+KNOWN_ENTITIES = {
+    "living room light": "light.wiz_rgbww_tunable_a480ec",
+    "lab light": "light.wiz_rgbww_tunable_225a0a",
+}
+
+DECISIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decisions.jsonl")
+
 # Conversation memory (resets on restart)
 conversation_history = []
 MAX_HISTORY = 10
