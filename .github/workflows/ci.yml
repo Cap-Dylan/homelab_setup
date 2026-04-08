@@ -1,0 +1,42 @@
+name: Jarvis CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t jarvis:ci ./projects/jarvis
+
+      - name: Run smoke tests
+        run: |
+          docker run --rm \
+            -e HA_TOKEN=fake-token-for-ci \
+            -e MATRIX_PASSWORD=fake-password-for-ci \
+            jarvis:ci python -c "
+          from ha_client import get_state, call_service
+          from ollama_client import ask_ollama
+          from jarvis import get_brightness, get_color_temp
+          from decision_log import log_decision
+          from webhook import app
+
+          # Test deterministic brightness logic
+          assert get_brightness(6) == 180, 'Dawn brightness should be 180'
+          assert get_brightness(12) == 255, 'Midday brightness should be 255'
+          assert get_brightness(20) == 150, 'Evening brightness should be 150'
+          assert get_brightness(23) == 80, 'Night brightness should be 80'
+
+          # Test Flask app exists and has the webhook route
+          assert '/webhook' in [rule.rule for rule in app.url_map.iter_rules()]
+
+          print('All smoke tests passed')
+          "
