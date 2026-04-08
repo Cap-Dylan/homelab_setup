@@ -13,7 +13,7 @@ Shortcuts still work:
     !help   — show available commands
 
 Setup:
-    1. export JARVIS_MATRIX_PASSWORD="Stonebear96"
+    1. export MATRIX_PASSWORd
     2. python3 jarvis_bot.py
 """
 
@@ -28,32 +28,18 @@ from nio import AsyncClient, LoginResponse, RoomMessageText
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-MATRIX_HOMESERVER = "http://100.77.80.94:6167"
-MATRIX_USER = "@jarvis:100.77.80.94"
-MATRIX_PASSWORD = os.environ.get("JARVIS_MATRIX_PASSWORD", "")
-
-JARVIS_ROOM_ID = "!3toinz8WHv4l0hMrHV:100.77.80.94"
+MATRIX_HOMESERVER = os.environ.get("MATRIX_HOMESERVER", "http://100.77.80.94:6167")
+MATRIX_USER = os.environ.get("MATRIX_USER", "@jarvis:100.77.80.94")
+MATRIX_PASSWORD = os.environ.get("MATRIX_PASSWORD", "")
+JARVIS_ROOM_ID = os.environ.get("MATRIX_ROOM_ID", "!3toinz8WHv4l0hMrHV:100.77.80.94")
 
 # Ollama on the MSI — one model for everything
-OLLAMA_HOST = "http://100.77.80.94:11434"
-JARVIS_MODEL = "llama3.1:8b-instruct-q5_K_M"
+OLLAMA_HOST = os.environ.get("OLLAMA_URL", "http://100.77.80.94:11434")
+JARVIS_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b-instruct-q5_K_M")
 
 # Home Assistant
-HA_HOST = "http://192.168.0.59:8123"
-HA_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI3NGU0MzZhNGI0YzA0OWFjYTAyN2NlNDBmNjQwMjFjNyIsImlhdCI6MTc3NTI4MTQwMCwiZXhwIjoyMDkwNjQxNDAwfQ.UA1LqJLGOcXd9RT7329ahnAKEkYsctdN53muBg9Rn-k"
-HA_HEADERS = {
-    "Authorization": f"Bearer {HA_TOKEN}",
-    "Content-Type": "application/json",
-}
-
-# Entities Jarvis knows about and can control
-KNOWN_ENTITIES = {
-    "living room light": "light.wiz_rgbww_tunable_a480ec",
-    "lab light": "light.wiz_rgbww_tunable_225a0a",
-}
-
-DECISIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decisions.jsonl")
+HA_HOST = os.environ.get("HA_URL", "http://192.168.0.59:8123")
+HA_TOKEN = os.environ["HA_TOKEN"]
 
 # Conversation memory (resets on restart)
 conversation_history = []
