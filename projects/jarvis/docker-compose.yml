@@ -1,0 +1,23 @@
+services:
+  jarvis-webhook:
+    build: .
+    container_name: jarvis-webhook
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./decisions.jsonl:/app/decisions.jsonl
+    restart: unless-stopped
+
+  jarvis-bot:
+    build: .
+    container_name: jarvis-bot
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    command: ["python", "jarvis_bot.py"]
+    volumes:
+      - ./decisions.jsonl:/app/decisions.jsonl
+    restart: unless-stopped
