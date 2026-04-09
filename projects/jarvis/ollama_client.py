@@ -11,8 +11,10 @@ def ask_ollama(prompt):
         json={
             "model": OLLAMA_MODEL,
             "prompt": prompt,
-            "stream": False
-        }
+            "stream": False,
+            "think": False
+        },
+        timeout=120
     )
     data = response.json()
     return data["response"]

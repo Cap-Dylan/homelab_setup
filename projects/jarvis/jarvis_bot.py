@@ -255,6 +255,7 @@ Jarvis:"""
                 "model": JARVIS_MODEL,
                 "prompt": prompt,
                 "stream": False,
+		"think": False,
             },
             timeout=120,
         )
