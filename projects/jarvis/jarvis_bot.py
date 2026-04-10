@@ -28,17 +28,17 @@ from nio import AsyncClient, LoginResponse, RoomMessageText
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-MATRIX_HOMESERVER = os.environ.get("MATRIX_HOMESERVER", "http://100.77.80.94:6167")
-MATRIX_USER = os.environ.get("MATRIX_USER", "@jarvis:100.77.80.94")
+MATRIX_HOMESERVER = os.environ.get("MATRIX_HOMESERVER", "http://localhost:6167")
+MATRIX_USER = os.environ.get("MATRIX_USER", "@jarvis:localhost")
 MATRIX_PASSWORD = os.environ.get("MATRIX_PASSWORD", "")
-JARVIS_ROOM_ID = os.environ.get("MATRIX_ROOM_ID", "!3toinz8WHv4l0hMrHV:100.77.80.94")
+JARVIS_ROOM_ID = os.environ.get("MATRIX_ROOM_ID", "")
 
 # Ollama on the MSI — one model for everything
-OLLAMA_HOST = os.environ.get("OLLAMA_URL", "http://100.77.80.94:11434")
+OLLAMA_HOST = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 JARVIS_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b-instruct-q5_K_M")
 
 # Home Assistant
-HA_HOST = os.environ.get("HA_URL", "http://192.168.0.59:8123")
+HA_HOST = os.environ.get("HA_URL", "http://localhost:8123")
 HA_TOKEN = os.environ["HA_TOKEN"]
 
 HA_HEADERS = {

@@ -1,7 +1,7 @@
 import os
 import requests
 
-HA_URL = os.environ.get("HA_URL", "http://192.168.0.59:8123")
+HA_URL = os.environ.get("HA_URL", "http://localhost:8123")
 TOKEN = os.environ["HA_TOKEN"]
 
 HEADERS = {

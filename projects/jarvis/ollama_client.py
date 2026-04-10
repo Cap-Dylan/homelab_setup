@@ -1,7 +1,7 @@
 import os
 import requests
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://192.168.0.32:11434")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b-instruct-q5_K_M")
 
 
