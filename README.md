@@ -39,7 +39,7 @@ Not every task needs the same model. I ran structured evaluations (200+ inferenc
 | Task | Model | Why |
 |------|-------|-----|
 | Color temperature | `llama3.2:3b` (~800ms avg) | Simple JSON task, 100% JSON compliance, fast |
-| Chat + commands | `Qwopus3.5 9B` (~7.5s avg) | Better conversational quality, Socratic persona, fine-tuning candidate |
+| Chat + commands | `Qwopus3.5 9B` (~2.5s avg) | Better conversational quality, Socratic persona, fine-tuning candidate |
 
 Decision logic philosophy: **if you can write it as rules, write it as rules.** The LLM only touches what genuinely benefits from reasoning.
 
