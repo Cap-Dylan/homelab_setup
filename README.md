@@ -1,145 +1,115 @@
-# homelab_setup
+# Homelab Setup
 
-Privacy-first, fully local homelab. No cloud dependency. Built on repurposed consumer hardware running local AI inference, smart home automation, and IoT experimentation.
+Multi-node, privacy-first homelab built for local AI inference, IoT automation, and smart home development. Everything runs on repurposed hardware with no cloud dependencies.
 
-Long-term goal: a full computer vision pipeline feeding into an autonomous home automation agent.
-
----
+The flagship project is **Jarvis** — an agentic smart home system where Frigate person detection triggers LLM reasoning, which autonomously controls lighting based on occupancy, time of day, and weather conditions. Commands and conversation happen through a self-hosted Matrix chat interface.
 
 ## Architecture
 
-Seven nodes, all on-prem. Three pillars: **AI inference**, **smart home control**, and **infrastructure/observability**.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Tailscale Mesh                           │
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐   │
+│  │  MSI GE76    │    │ UGREEN NAS   │    │ Lenovo IdeaPad   │   │
+│  │  (Ollama)    │◄──►│  (Frigate)   │───►│ (Home Assistant)  │   │
+│  │              │    │              │    │                    │   │
+│  │ RTX 2060 8GB │    │ Intel N100   │    │ Zigbee2MQTT       │   │
+│  │ Qwopus 9B   │    │ MQTT broker  │    │ Motion sensors     │   │
+│  │ llama3.2:3b  │    │ Continuwuity │    │ Wiz smart bulbs    │   │
+│  └──────────────┘    └──────────────┘    └──────────────────┘   │
+│          │                   │                    ▲              │
+│          │                   │                    │              │
+│          ▼                   │              HA Webhooks          │
+│  ┌──────────────┐            │                    │              │
+│  │   Vivobook   │            │           ┌────────┴─────────┐   │
+│  │ (API server) │            │           │    Jarvis Agent   │   │
+│  │ FastAPI      │            │           │  Detection → LLM  │   │
+│  │ Python 3.11  │            │           │   → Light Control │   │
+│  └──────────────┘            │           └──────────────────┘   │
+│                              │                                   │
+│  ┌──────────────┐    ┌───────┴──────┐    ┌──────────────────┐   │
+│  │ MacBook Pro  │    │ Custom Tower │    │  Surface Go 3    │   │
+│  │  M4 Pro      │    │  RTX 4090    │    │  (planned kiosk) │   │
+│  │ daily driver │    │ 128GB DDR5   │    │                  │   │
+│  └──────────────┘    │ training rig │    └──────────────────┘   │
+│                      └──────────────┘                           │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-| Node | Role | Always On |
-|------|------|-----------|
-| MacBook Pro M4 Pro | Daily driver, SSH cockpit | Yes |
-| MSI GE76 Raider (RTX 2060) | LLM inference (Ollama), Matrix homeserver | Yes |
-| ASUS Vivobook 16 | Infrastructure, monitoring, Jarvis orchestration | Yes |
-| Lenovo IdeaPad 1 | Home Assistant OS (bare-metal), MQTT broker | Yes |
-| UGREEN NASync DXP2800 (N100) | NAS, Frigate NVR, Docker apps | Yes |
-| Custom Tower (RTX 4090, 128GB) | Future ML training + heavy inference | On-demand |
-| Surface Go 3 | Planned HA wall kiosk | Not yet configured |
+## Hardware
 
-**Networking:** TP-Link BE3600 Wi-Fi 7 router, Deco W6000 mesh with Cat6 backhaul, 2.5G switches, Tailscale mesh VPN, AdGuard Home DNS, dedicated IoT SSID with device isolation.
+| Node | Role | Key Specs | OS | Status |
+|------|------|-----------|----|--------|
+| MSI GE76 Raider | 24/7 AI inference | i7-9750H, RTX 2060 8GB, 32GB RAM | Ubuntu Server 24.04 | Always-on |
+| UGREEN NASync DXP2800 | Storage, Frigate NVR, Matrix server | Intel N100, 8GB DDR5, 2× 500GB SATA | UGOS Pro (Docker) | Always-on |
+| Lenovo IdeaPad 1 | Home Assistant server | Celeron N4500, 36GB DDR4, 1TB NVMe | Home Assistant OS | Always-on |
+| ASUS Vivobook 16 | API server | i5-1135G7, 8GB RAM, 512GB NVMe | Ubuntu 24.04 (headless) | Always-on |
+| Custom Tower | ML training, heavy workloads | i7-14700, RTX 4090 24GB, 128GB DDR5 | Windows 11 | On-demand |
+| MacBook Pro 14" | Daily driver, prototyping | M4 Pro, 24GB unified, 512GB SSD | macOS | Daily driver |
+| Surface Go 3 | Planned HA kiosk | Pentium Gold, 4GB RAM | Windows | Planned |
 
----
+## Networking
 
-## Jarvis — Autonomous Smart Home Agent
+- **Router:** TP-Link Archer BE3600 (Wi-Fi 7, 2.5G WAN/LAN)
+- **Mesh:** TP-Link Deco W6000 (wired Cat6 backhaul)
+- **Overlay:** Tailscale mesh across all nodes
+- **IoT isolation:** Dedicated SSID for cameras and Zigbee devices
+- **Switches:** TP-Link TL-SG105S-M2 (2.5G) + TL-SG105
+- **UPS:** On all critical nodes
 
-The main project. Jarvis is a multi-model AI agent that controls the smart home through two independent services:
+## Project Phases
 
-**Automated Agent** — Frigate detects a person via the Tapo C121 camera → MQTT → Home Assistant automation → REST webhook to the Vivobook. Jarvis then makes a chain of decisions: cooldown check → hardcoded on/off → deterministic brightness lookup → LLM-reasoned color temperature → HA executes. Occupancy cleared events start a delayed turn-off with cancellation if someone comes back.
+### Completed
 
-**Matrix Chat Bot** — Talk to Jarvis naturally through Element. The bot runs as a Socratic executive assistant — direct commands get immediate execution, but planning questions, architecture decisions, and "should I..." prompts get Socratic pushback to help reason through problems. Resilient JSON parsing handles when the LLM splits objects or wraps them in markdown.
-
-### Multi-Model Routing (Phase 9)
-
-Not every task needs the same model. I ran structured evaluations (200+ inferences across multiple test scenarios, multiple runs each) comparing JSON compliance, value accuracy, latency, and response quality across 6 models from 0.6B to 9B parameters. The accuracy floor for reliable structured JSON output was 3B — below that, models can't consistently follow schema constraints regardless of prompt engineering.
-
-| Task | Model | Why |
-|------|-------|-----|
-| Color temperature | `llama3.2:3b` (~800ms avg) | Simple JSON task, 100% JSON compliance, fast |
-| Chat + commands | `Qwopus3.5 9B` (~2.5s avg) | Better conversational quality, Socratic persona, fine-tuning candidate |
-
-Decision logic philosophy: **if you can write it as rules, write it as rules.** The LLM only touches what genuinely benefits from reasoning.
-
-| Decision | Method | Reasoning |
-|----------|--------|-----------|
-| Light on/off | Hardcoded Python | Can't hallucinate a boolean |
-| Brightness | Time-based lookup | Pure function, no judgment needed |
-| Color temperature | LLM (3B, weather-aware) | Genuinely fuzzy, benefits from reasoning |
-| Chat commands | LLM (9B, full control) | User is supervising, model should interpret freely |
-
-### Model Evaluation Methodology
-
-Two eval harnesses in the repo:
-- `eval_models.py` — Full comparison across color temp + bot command + chat scenarios with JSON compliance, latency, and per-test breakdown
-- `eval_color_temp.py` — Focused color temp eval with expected value ranges, expanded boundary scenarios, and viability thresholds
-
-Models evaluated: `llama3.1:8b`, `llama3.2:3b`, `llama3.2:1b`, `qwen2.5:1.5b`, `qwen3:0.6b`, `qwen3:1.7b`, `qwen3.5:2b`, `fredrezones55/Qwopus3.5:latest`
-
-### Deployment
-
-Both services run as Docker containers on the Vivobook via `docker-compose.yml`. All secrets injected through `.env` (gitignored), template in `.env.example`. GitHub Actions CI builds the image and runs smoke tests on every push to `main`. Containers run in `America/Denver` timezone.
-
-### Key Files (`projects/jarvis/`)
-
-| File | What it does |
-|------|-------------|
-| `jarvis.py` | Automated orchestrator — cooldown, delayed off, brightness lookup, LLM color temp |
-| `jarvis_bot.py` | Matrix chat bot — Socratic assistant, intent parsing, command execution, conversation |
-| `webhook.py` | Flask server on :5050, receives HA events |
-| `ha_client.py` | Home Assistant REST API client |
-| `ollama_client.py` | Ollama client with per-task model routing |
-| `decision_log.py` | Writes every decision to `decisions.jsonl` |
-| `eval_models.py` | Full model evaluation harness (color temp + bot) |
-| `eval_color_temp.py` | Focused color temp eval with value range validation |
-| `Dockerfile` | Python 3.11-slim, copies source, installs deps |
-| `docker-compose.yml` | Defines jarvis-webhook + jarvis-bot containers |
-
----
-
-## Monitoring Stack
-
-Prometheus on the Vivobook scrapes all four always-on nodes every 15 seconds with 30-day retention. Grafana serves the Node Exporter Full dashboard.
-
-| Node | Status |
-|------|--------|
-| Vivobook | ✅ Docker, network_mode: host |
-| MSI | ✅ systemd service |
-| NAS | ✅ Docker, network_mode: host |
-| HA Lenovo | ✅ Community add-on |
-| Tower | ⬜ Windows Node Exporter planned |
-
----
-
-## Infrastructure Services (Vivobook)
-
-Two Docker Compose stacks:
-
-**infra-stack** — AdGuard Home (DNS sinkhole), Prometheus, Grafana, Node Exporter
-
-**jarvis** — jarvis-webhook, jarvis-bot
-
-Also running standalone: FastAPI Ollama wrapper with `/health`, `/ask`, `/summarize` endpoints (Phase 3, on-demand).
-
----
-
-## IoT Devices
-
-| Device | Integration | Control |
-|--------|-------------|---------|
-| Tapo C121 camera | Frigate (RTSP → NAS → MQTT → HA) | Jarvis automated |
-| Wiz RGBWW (living room) | HA direct | Jarvis automated + Matrix chat |
-| Wiz RGBWW (lab) | HA direct | Matrix chat commands |
-| ThirdReality Zigbee motion sensors | Zigbee2MQTT | HA automations |
-| Makeblock Halocode | Planned | Future Jarvis voice I/O |
-
----
-
-## Project Timeline
-
-| Phase | What got built |
+| Phase | What Got Built |
 |-------|---------------|
-| 1 | SSH config, Tailscale mesh, VS Code Remote, headless Vivobook, pyenv, GitHub SSH |
-| 2 | README rewrite, `/projects` scaffolding, `.gitignore`, conventional commits |
-| 3 | FastAPI Ollama wrapper (`/health`, `/ask`, `/summarize`) |
-| 4 | IoT SSID isolation, Tapo C121 RTSP, Frigate NVR on NAS, Frigate → HA via HACS + MQTT |
-| 5 | Prometheus + Node Exporter on all nodes, Grafana dashboards, GitHub profile README |
-| 6 | Jarvis v1 — person detection → LLM reasoning → autonomous light control |
-| 7 | Self-hosted Matrix chat (Continuwuity), unified bot for conversation + HA commands |
-| 7.5 | Hardcoded on/off + brightness, weather-aware color temp, cooldown + delayed turn-off |
-| 8 | Dockerized Jarvis, env var config, GitHub Actions CI with smoke tests |
-| 9 | Multi-model eval (6 models, 0.6B-9B), model routing (3B color temp, 9B Socratic chat), prompt engineering |
+| 1 | SSH infrastructure, Tailscale mesh, VS Code Remote SSH, headless Vivobook setup |
+| 2 | Repository structure, conventional commits, `.gitignore`, documentation baseline |
+| 3 | FastAPI Ollama wrapper (`/health`, `/ask`, `/summarize`) on Vivobook |
+| 4 | IoT SSID isolation, Tapo C121 RTSP stream, Frigate NVR on NAS, Frigate → HA via HACS + MQTT |
+| 5 | Prometheus Node Exporter on all nodes, Grafana dashboards, GitHub profile README |
+| 6 | **Jarvis v1** — person detection → LLM reasoning → autonomous light control |
+| 7 | Self-hosted Matrix chat (Continuwuity), unified 8B bot for conversation + HA commands |
+| 7.5 | Hardcoded on/off + brightness, weather-aware color temp, cooldown + delayed turn-off, resilient JSON parsing |
+| 8 | Dockerized Jarvis (Dockerfile + docker-compose), env var config, GitHub Actions CI with smoke tests |
+| 9 | Multi-model eval harness (8 models, 0.6B–9B), per-task model routing, Socratic persona, prompt engineering |
 
-**Coming up:**
-- Phase 10 — CV fine-tuning pipeline on the 4090 (person classification: resident / delivery / unknown)
-- Phase 11 — Agent v2 architecture (planner → validator → executor, goal switching)
-- Phase 12 — Portfolio polish + job prep
+### Phase 9 Highlights
 
----
+Evaluated 8 models and implemented per-task routing based on benchmarks:
 
-## Guiding Principles
+| Task | Model | Latency | Accuracy |
+|------|-------|---------|----------|
+| Color temp reasoning | llama3.2:3b | ~800ms (warm) | 100% JSON compliance |
+| Chat + commands | Qwopus3.5 9B | ~7.5s | 88% (fine-tune target) |
+
+Key findings: 3B is the accuracy floor for reliable structured JSON. Prompt ambiguity caused more failures than model capability. Eval prompts must exactly match production prompts.
+
+### In Progress
+
+- **Phase 9.5** — Fine-tuning data collection: logging Qwopus failures as training pairs during normal Jarvis use (targeting 50–100 examples for QLoRA)
+- **Ollama structured output** — `format: "json"` enforced at inference level to address the remaining action-drop rate
+
+### Planned
+
+- **Phase 10** — CV fine-tuning pipeline: MobileNetV3/EfficientNet-Lite on Frigate snapshots for resident/delivery/unknown classification (PyTorch on 4090)
+- **Phase 11** — Agent v2 architecture: planner → validator → executor pipeline with goal switching and human-in-the-loop approval via Matrix
+- **Phase 12** — Portfolio polish, LinkedIn, project writeups, resume bullets, interview prep
+
+## Tech Stack
+
+**AI/ML:** Ollama, PyTorch (planned), model evaluation, prompt engineering, per-task model routing, QLoRA fine-tuning (planned)
+
+**Infrastructure:** Docker, Docker Compose, GitHub Actions CI, systemd, Tailscale, Prometheus, Grafana, FastAPI
+
+**Smart Home:** Home Assistant, Zigbee2MQTT, Frigate NVR, MQTT, Wiz smart bulbs, Tapo cameras
+
+**Communication:** Matrix (Continuwuity), nio-python
+
+**Languages:** Python
+
+## Key Design Principles
 
 1. If you can write it as rules, write it as rules.
 2. Separate what changes from what doesn't.
@@ -151,3 +121,7 @@ Also running standalone: FastAPI Ollama wrapper with `/health`, `/ask`, `/summar
 8. Log everything you'll wish you had later.
 9. Keep components loosely coupled.
 10. The best code is code you delete.
+
+## Documentation
+
+- [Infrastructure details](docs/infrastructure.md) — hardware inventory, networking, engineering notes
