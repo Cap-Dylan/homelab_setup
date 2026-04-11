@@ -3,7 +3,7 @@ import json
 import threading
 from datetime import datetime
 from ha_client import get_state, call_service
-from ollama_client import ask_ollama
+from ollama_client import ask_ollama, OLLAMA_COLOR_MODEL
 
 # --- State (persists while Flask is running) ---
 last_turn_on_time = None
@@ -34,10 +34,12 @@ Color temperature guide (Kelvin, range 2000-6500):
 - Evening: 2500-3000 Kelvin (warm)
 - Night/clear-night: 2200-2700 Kelvin (very warm)
 
+Time of day takes priority over weather when they conflict.
+
 Respond with ONLY a JSON object, no other text:
 {{"color_temp_kelvin": 2000-6500, "reason": "one sentence explanation"}}"""
 
-    response = ask_ollama(prompt)
+    response = ask_ollama(prompt, model=OLLAMA_COLOR_MODEL)
     try:
         result = json.loads(response)
         return (
