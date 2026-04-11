@@ -12,22 +12,22 @@ The flagship project is **Jarvis** — an agentic smart home system where Frigat
 │                                                                 │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐   │
 │  │  MSI GE76    │    │ UGREEN NAS   │    │ Lenovo IdeaPad   │   │
-│  │  (Ollama)    │◄──►│  (Frigate)   │───►│ (Home Assistant)  │   │
-│  │              │    │              │    │                    │   │
-│  │ RTX 2060 8GB │    │ Intel N100   │    │ Zigbee2MQTT       │   │
-│  │ Qwopus 9B   │    │ MQTT broker  │    │ Motion sensors     │   │
-│  │ llama3.2:3b  │    │ Continuwuity │    │ Wiz smart bulbs    │   │
+│  │  (Ollama)    │◄──►│  (Frigate)   │───►│ (Home Assistant) │   │
+│  │              │    │              │    │                  │   │
+│  │ RTX 2060 8GB │    │ Intel N100   │    │ Zigbee2MQTT      │   │
+│  │ Qwopus 9B    │    │ MQTT broker  │    │ Motion sensors   │   │
+│  │ llama3.2:3b  │    │ Continuwuity │    │ Wiz smart bulbs  │   │
 │  └──────────────┘    └──────────────┘    └──────────────────┘   │
-│          │                   │                    ▲              │
-│          │                   │                    │              │
-│          ▼                   │              HA Webhooks          │
-│  ┌──────────────┐            │                    │              │
+│          │                   │                    ▲             │
+│          │                   │                    │             │
+│          ▼                   │              HA Webhooks         │
+│  ┌──────────────┐            │                    │             │
 │  │   Vivobook   │            │           ┌────────┴─────────┐   │
-│  │ (API server) │            │           │    Jarvis Agent   │   │
-│  │ FastAPI      │            │           │  Detection → LLM  │   │
-│  │ Python 3.11  │            │           │   → Light Control │   │
+│  │ (API server) │            │           │    Jarvis Agent  |   |
+│  │ FastAPI      │            │           │  Detection → LLM |   │
+│  │ Python 3.11  │            │           │   → Light Control|   │
 │  └──────────────┘            │           └──────────────────┘   │
-│                              │                                   │
+│                              │                                  │
 │  ┌──────────────┐    ┌───────┴──────┐    ┌──────────────────┐   │
 │  │ MacBook Pro  │    │ Custom Tower │    │  Surface Go 3    │   │
 │  │  M4 Pro      │    │  RTX 4090    │    │  (planned kiosk) │   │
