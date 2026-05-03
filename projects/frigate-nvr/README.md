@@ -53,11 +53,6 @@ harmless — Tapo firmware quirk, Frigate handles it fine.
 - Plan: once Frigate is confirmed working, enable Device Isolation and 
   remove C121 from the list (NAS needs to reach it), keeping Wiz bulbs isolated
 
-## Next Steps
-- [ ] Deploy Frigate container on NAS via Portainer
-- [ ] Configure frigate.yml with RTSP URL and N100 QuickSync decode
-- [ ] Verify detections surfacing in Frigate web UI
-- [ ] Connect Frigate to Home Assistant via native integration
 
 ## Update – April 3, 2026
 
