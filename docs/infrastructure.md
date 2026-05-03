@@ -1,164 +1,70 @@
 # Homelab Infrastructure
 
-**Last updated:** April 11, 2026
-**Author:** Dylan
-
-Current-state documentation for a multi-node homelab running local AI inference, IoT automation, and a self-hosted communication stack. No cloud dependencies — everything runs on repurposed hardware behind a Tailscale mesh.
+**Last updated:** April 15, 2026
+**Author:** Dylan Capaldi
+**Purpose:** Current baseline of the homelab — hardware, networking, compute roles, and engineering decisions.
 
 ---
 
 ## Hardware Inventory
 
-| Node | Role | CPU / GPU | RAM | Storage | OS | Status |
-|------|------|-----------|-----|---------|----|--------|
-| MSI GE76 Raider | 24/7 AI inference (Ollama) | i7-9750H, RTX 2060 Super 8GB | 32GB DDR4 | 500GB NVMe + 1TB HDD | Ubuntu Server 24.04 | Always-on, TDP-capped ~60% |
-| UGREEN NASync DXP2800 | Storage, Frigate NVR, Matrix server | Intel N100 (4C/4T) | 8GB DDR5 (expandable) | 2× Hitachi Deskstar 500GB (Basic mode) | UGOS Pro | Always-on |
-| Lenovo IdeaPad 1 15IJL7 | Home Assistant server | Celeron N4500 (2C/2T) | 36GB DDR4 | 1TB NVMe + 120GB microSD | Home Assistant OS | Always-on, ~10–30W |
-| ASUS Vivobook 16 | API server | i5-1135G7, Iris Xe | 8GB DDR4 | 512GB NVMe | Ubuntu 24.04 (headless) | Always-on |
-| Custom Liquid-Cooled Tower | ML training, heavy workloads | i7-14700 (20C/28T), RTX 4090 24GB | 128GB DDR5 | 1TB NVMe + 8TB HDD | Windows 11 | On-demand |
-| MacBook Pro 14" | Daily driver, prototyping | M4 Pro (12C CPU, 16C GPU, 16C NPU) | 24GB unified | 512GB SSD | macOS | Daily driver |
-| Surface Go 3 | Planned HA kiosk | Pentium Gold 6500Y | 4GB | 64GB eMMC | Windows | Planned |
+| Device | Role | CPU / GPU | RAM | Storage | OS / Notes |
+|---|---|---|---|---|---|
+| **Custom Liquid-Cooled Tower** | Heavy ML training & large-model inference | i7-14700 (20C/28T) + RTX 4090 24GB | 128 GB DDR5 | 1 TB NVMe + 8 TB HDD | Windows 11 |
+| **MSI GE76 Raider** (headless) | 24/7 local AI inference | i7-9750H + RTX 2060 Super 8GB | 32 GB | 500 GB NVMe + 1 TB HDD | Ubuntu Server 24.04 LTS |
+| **UGREEN NASync DXP2800** | Primary NAS / app server | Intel N100 (4C/4T) | 8 GB DDR5 (expandable) | 2× 500 GB SATA + 2× M.2 NVMe slots | UGOS Pro (App Center, Docker, KVM) |
+| **Lenovo IdeaPad 1 15IJL7** | Primary HA server | Celeron N4500 | 36 GB DDR4 | 1 TB NVMe + 120 GB microSD | Home Assistant OS (bare metal) |
+| **Apple MacBook Pro 14"** | Daily driver / prototyping | M4 Pro (12C CPU, 16C GPU, 16C NPU) | 24 GB unified | 512 GB SSD | macOS (Ollama, MPS) |
+| **ASUS Vivobook 16** | Spare / future edge device | i5-1135G7 + Iris Xe | 8 GB | 512 GB NVMe | Ubuntu 24.04 LTS |
+| **Surface Go 3** | Planned HA kiosk | Pentium Gold 6500Y | 4 GB | 64 GB eMMC | TBD (kiosk mode planned) |
 
-**Retired:** HP Z400 Workstation (Proxmox/ZFS) — removed March 2026 after repeated pve-cluster/pmxcfs failures. Replaced by UGREEN NAS.
-
----
-
-## Services by Node
-
-### MSI GE76 Raider — AI Inference
-
-| Service | Details |
-|---------|---------|
-| Ollama | Primary inference server, exposed on 0.0.0.0:11434 |
-| Jarvis agent | Dockerized (docker-compose), person detection → LLM reasoning → light control |
-| Prometheus Node Exporter | Metrics collection for Grafana |
-
-**Models loaded:**
-
-| Model | Task | Latency |
-|-------|------|---------|
-| Qwopus3.5 9B | Chat + commands (Socratic persona) | ~7.5s |
-| llama3.2:3b | Color temp reasoning | ~800ms warm |
-| llama3.1:8b-instruct-q5_K_M | General inference (legacy default) | ~3s |
-
-Ollama systemd override: `Environment="OLLAMA_HOST=0.0.0.0"` for LAN/Tailnet access.
-
-### UGREEN NASync DXP2800 — Storage & Apps
-
-| Service | Details |
-|---------|---------|
-| Frigate NVR | Tapo C121 RTSP ingestion, person detection, snapshot storage |
-| Continuwuity | Self-hosted Matrix server for Jarvis chat interface |
-| MQTT broker | Frigate → Home Assistant event bridge |
-| Portainer | Docker container management GUI |
-
-Drives are in Basic mode (no RAID). RAID1 planned when new drives arrive.
-
-### Lenovo IdeaPad 1 — Home Assistant
-
-| Service | Details |
-|---------|---------|
-| Home Assistant OS | Bare-metal install, primary automation hub |
-| Zigbee2MQTT | Zigbee coordinator for motion sensors and smart bulbs |
-| HACS | Frigate integration |
-| Tailscale add-on | Mesh access (added April 2026) |
-
-### ASUS Vivobook 16 — API Server
-
-| Service | Details |
-|---------|---------|
-| FastAPI Ollama wrapper | `/health`, `/ask`, `/summarize` endpoints on port 8000 |
-| pyenv | Python 3.11.9 environment management |
-| Prometheus Node Exporter | Metrics collection for Grafana |
-
-### Custom Tower — Training Rig
-
-Currently idle. Reserved for Phase 10 (PyTorch fine-tuning on RTX 4090) and QLoRA fine-tuning of Qwopus once training data collection is complete.
+The legacy HP Z400 (Proxmox/ZFS) was retired in March 2026 in favor of the UGREEN NASync DXP2800 — a modern Intel N100 mini-server with built-in Docker, KVM, and 2.5 GbE networking.
 
 ---
 
-## Networking
+## Networking & Connectivity
 
-```
-                         ┌───────────┐
-                         │    ISP    │
-                         └─────┬─────┘
-                               │
-                    ┌──────────▼───────────┐
-                    │    TP-Link BE3600    │
-                    │   Wi-Fi 7 Router     │
-                    │   2.5G WAN/LAN       │
-                    │   IoT SSID (isolated)│
-                    └─────┬──────────┬─────┘
-                          │          │
-              ┌───────────▼──┐  ┌────▼──────────┐
-              │ TL-SG105S-M2 │  │   TL-SG105    │
-              │  (2.5G)      │  │   (1G)        │
-              └──┬───────────┘  └───┬───────────┘
-                 │                  │
-        ┌────────┼──────────┐      ├── Deco W6000 (mesh node)
-        │        │          │      ├── Printer
-        │        │          │      └── Smart TV
-        │        │          │
-        │        │     Deco W6000 (mesh node)
-┌───────│────────│────────────────────────────┐
-│       │   ┌────┴─────────────────────────┐  │
-│       │   │  Lab Infrastructure          │  │
-│       │   │                              │  │
-│       │   │  MSI GE76 (LAN)    (Ollama)  │  │
-│       │   │  Vivobook (WIFI)    (API)    │  │
-│       │   │  UGREEN NAS (LAN)  (Frigate) │  │
-│       │   │  Lenovo (WIFI)       (HA)    │  │
-│       │   │  Tower (LAN)       (training)│  │
-│       │   └──────────────────────────────┘  │
-│       │                                     │
-│  Tailscale mesh overlay                     │
-│  (all nodes + MacBook)                      │
-└─────────────────────────────────────────────┘
-```
-
-- **Overlay:** Tailscale mesh across all nodes (MacBook, MSI, Vivobook, NAS, HA Lenovo)
-- **IoT isolation:** Built into the BE3600 — dedicated SSID for cameras and Zigbee devices
-- **Cabling:** Cat6 throughout the house
-- **UPS:** On all critical always-on nodes
-- **Measured throughput:** ~2.3 Gbps down via Ookla
+- **Primary router:** TP-Link Archer BE3600 (Wi-Fi 7, 2.5G WAN/LAN) — measured ~2.3 Gbps down
+- **Mesh:** TP-Link Deco W6000 (2-pack, wired Cat6 backhaul)
+- **Switches:** TP-Link TL-SG105S-M2 (2.5G) + TL-SG105
+- **Cabling:** Cat6 throughout
+- **Remote access:** Tailscale mesh VPN across all nodes — no public ports exposed
+- **DNS:** Network-wide AdGuard Home filtering
+- **UPS:** Present on all critical nodes
+- **Planned:** IoT VLAN segmentation before extending camera deployment
 
 ---
 
-## Smart Home / IoT Layer
+## Smart Home / IoT Layer (Live)
 
-| Component | Hardware | Protocol | Integration |
-|-----------|----------|----------|-------------|
-| Motion sensors | ThirdReality (multiple) | Zigbee | Zigbee2MQTT → HA |
-| Smart bulbs | Wiz RGBWW Tunable (2) | Wi-Fi | HA REST API |
-| Camera | Tapo C121 (2K QHD) | RTSP | Frigate NVR → MQTT → HA |
-| Coordinator | USB Zigbee dongle | Zigbee | Zigbee2MQTT on HA |
-
-**Automation flow:** Motion sensor triggers → HA webhook → Jarvis agent → Ollama inference → HA light service calls
+- **Zigbee Coordinator:** MQTT-compatible dongle via Zigbee2MQTT
+- **Sensors:** Multiple ThirdReality Zigbee motion sensors
+- **Lighting:** Wiz RGBWW smart bulbs (motion-driven automation via Jarvis)
+- **Camera:** Tapo C121 (2K QHD) → Frigate NVR → Home Assistant
 
 ---
 
-## Engineering Decisions
+## Compute Roles & Architecture
 
-| Decision | Rationale |
-|----------|-----------|
-| Bare-metal HA OS on low-power laptop | Ultra-stable, minimal overhead, ~10W idle draw |
-| MSI GE76 TDP-capped at ~60% | Keeps thermals at 38–46°C for 24/7 operation |
-| Per-task model routing | 3B for fast structured JSON, 9B for conversational quality — latency vs accuracy tradeoff |
-| Ollama `format: "json"` | Enforces valid JSON at inference level, eliminating ~12% action-drop rate without fine-tuning |
-| Dedicated IoT SSID | Camera and Zigbee traffic isolated from primary network |
-| Tailscale over VPN | Zero-config mesh, no port forwarding, works across NAT |
-| UGREEN NAS over Proxmox Z400 | Modern N100 hardware, lower power, Docker-native, no ZFS/cluster headaches |
-| Dockerized Jarvis with CI | Reproducible deploys, GitHub Actions smoke tests catch regressions before they hit production |
-| Decision logging (JSONL) | Jarvis can explain its own reasoning when asked — traceability for an autonomous agent |
-| Fallback JSON parser retained | Defense in depth — even with `format: "json"`, never trust LLM output without validation |
+- **Always-on services:** Lenovo IdeaPad (Home Assistant) + MSI GE76 (Ollama inference)
+- **Heavy workloads:** Custom Tower (4090) — PyTorch fine-tuning, large-model inference
+- **Storage & app server:** UGREEN NASync DXP2800
+- **Portability / prototyping:** MacBook M4 Pro
+- **Future:** Frigate NVR consolidation onto the NASync; CV fine-tuning pipeline on the 4090
 
 ---
 
-## Monitoring
+## Engineering Decisions & Gotchas
 
-- **Prometheus Node Exporter** on MSI, Vivobook, NAS, Lenovo
-- **Grafana dashboards** for CPU, memory, disk, GPU thermals, network
-- **Pending:** Windows Node Exporter on tower 
+- **Bare-metal HA OS on a low-power laptop** — ultra-stable, minimal overhead, no virtualization layer to debug
+- **MSI GE76 TDP-capped at ~60%** — perfect 24/7 inference efficiency without thermal stress
+- **Retired Z400** after repeated `pve-cluster` / `pmxcfs` failures and legacy hardware frustration
+- **UGOS Pro** is more capable than a typical NAS — Docker apps, VMs, direct HA/Frigate possible. ZFS not natively supported (using Btrfs for now)
+- **Tailscale on every node** — no port forwards, no exposed services, every cross-node connection authenticated
 
 ---
+
+## Project Repositories
+
+- [`Jarvis`](https://github.com/Cap-Dylan/Jarvis) — multi-zone LLM agent for smart-home automation, runs on this lab's MSI GE76 + tower
+- [`tort-agent`](https://github.com/Cap-Dylan/tort-agent) — local LLM workflow assistant, runs on the tower (RTX 4090)
