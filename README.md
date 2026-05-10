@@ -1,96 +1,129 @@
 # homelab_setup
 
-> A privacy-first, fully local multi-node homelab — designed as both a working production environment and a portfolio of deployed projects. No cloud LLMs, no SaaS dependencies, no telemetry leaving the network.
+Multi-node homelab engineered for local AI inference, smart home automation, and edge ML — with zero cloud LLM dependencies. All inference, training, and decision-making runs on owned hardware behind a Tailscale mesh.
 
 ---
 
-## Architecture
+## Network Architecture
 
-```mermaid
-flowchart LR
-    subgraph Edge["Edge / sensors"]
-        Cam["Tapo C121 (RTSP)"]
-        Zigbee["Zigbee sensors + bulbs"]
-    end
-
-    subgraph Storage["NAS / app server (UGREEN N100)"]
-        Frigate["Frigate NVR<br/>(QuickSync HW decode)"]
-        OpenWebUI["Open WebUI"]
-        Portainer["Portainer"]
-    end
-
-    subgraph Inference["Inference (MSI GE76 + Tower)"]
-        Ollama["Ollama<br/>llama3.2:3b · qwen3:14b · qwen3.6:35b-a3b"]
-    end
-
-    subgraph Always["24/7 services"]
-        HA["Home Assistant<br/>(Lenovo IdeaPad)"]
-        InfraStack["infra-stack<br/>(Vivobook headless)<br/>AdGuard · Prometheus · Grafana"]
-    end
-
-    subgraph Apps["Agent layer"]
-        Jarvis["Jarvis<br/>(Flask + Matrix bot)"]
-        OllamaAPI["ollama-api-wrapper<br/>(FastAPI)"]
-        Tort["Tort Agent<br/>(M4 Pro CLI)"]
-    end
-
-    Cam --> Frigate
-    Frigate -->|"MQTT"| HA
-    Zigbee --> HA
-    HA -->|"webhook"| Jarvis
-    Jarvis -->|"REST"| HA
-    Jarvis --> Ollama
-    Tort --> Ollama
-    OllamaAPI --> Ollama
-    InfraStack -.scrapes.-> HA
-    InfraStack -.scrapes.-> Storage
-    InfraStack -.scrapes.-> Inference
+```
+                           ┌─────────────────────────────────────────────┐
+                           │            Tailscale Mesh VPN               │
+                           └──────┬──────┬──────┬──────┬──────┬─────────┘
+                                  │      │      │      │      │
+                    ┌─────────────┤      │      │      │      ├────────────┐
+                    │             │      │      │      │      │            │
+              ┌─────┴─────┐ ┌────┴────┐ │ ┌────┴────┐ │ ┌────┴────┐ ┌────┴────┐
+              │   Tower   │ │   MSI   │ │ │  UGREEN │ │ │ MacBook │ │ Surface │
+              │   (4090)  │ │  GE76   │ │ │   NAS   │ │ │ M4 Pro  │ │  Go 3   │
+              │           │ │ (2060)  │ │ │         │ │ │         │ │         │
+              │ Heavy     │ │ Light   │ │ │Syncthing│ │ │  Daily  │ │Planned  │
+              │ inference │ │ 24/7    │ │ │  hub +  │ │ │ driver  │ │ kiosk   │
+              │ + training│ │inference│ │ │ storage │ │ │         │ │         │
+              └───────────┘ └────┬────┘ │ └─────────┘ │ └─────────┘ └─────────┘
+                                 │      │             │
+                          Jarvis │ ┌────┴────┐        │
+                         webhook │ │ Lenovo  │        │
+                                 │ │IdeaPad 1│        │
+                                 │ │         │   ┌────┴────┐
+                                 │ │  Home   │   │  ASUS   │
+                                 │ │Assistant│   │Vivobook │
+                                 │ │  + Z2M  │   │         │
+                                 │ └────┬────┘   │ Docker  │
+                                 │      │        │  host   │
+                                 │ ┌────┴─────┐  └─────────┘
+                                 │ │  Zigbee  │
+                                 │ │  mesh    │
+                                 │ └──────────┘
+                                 │
+                           ┌─────┴──────┐
+                           │  Frigate   │
+                           │  NVR       │
+                           │ (Tapo C121)│
+                           └────────────┘
 ```
 
----
+## Hardware Inventory
 
-## Projects (each is its own deployed system)
+| Node | Specs | OS | Role |
+|------|-------|----|------|
+| **Custom Tower** | i7-14700 (20C/28T), RTX 4090 24GB, 128GB DDR5, 1TB NVMe + 8TB HDD | Windows 11 | Primary inference ([`qwen3.6:35b-a3b`](https://ollama.com/library/qwen3.6:35b-a3b)), ML training, Tort Agent host |
+| **MSI GE76 Raider** | i7-9750H, RTX 2060 8GB, 32GB DDR4, 500GB NVMe + 1TB HDD | Ubuntu Server 24.04 | 24/7 light inference ([`llama3.2:3b`](https://ollama.com/library/llama3.2:3b), [`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b)), Jarvis webhook host |
+| **Lenovo IdeaPad 1** | Celeron N4500, 36GB DDR4, 1TB NVMe + 120GB µSD | Home Assistant OS | HA server, Zigbee2MQTT coordinator, ~10–30W idle |
+| **UGREEN NASync DXP2800** | Intel N100 (4C/4T), 8GB DDR5, 2× 500GB SATA | UGOS Pro | Syncthing hub, Docker apps, vault sync source of truth |
+| **MacBook Pro 14"** | M4 Pro (12C/16C GPU/16C NPU), 24GB unified, 512GB SSD | macOS | Daily driver, Tort Agent dev, Control Center dev |
+| **ASUS Vivobook 16** | i5-1135G7, Iris Xe, 8GB, 512GB NVMe | Ubuntu 24.04 headless | Docker host, kiosk dashboard (deployed, standby), pyenv |
+| **Surface Go 3** | Pentium Gold 6500Y, 4GB, 64GB eMMC | Windows | Planned HA kiosk display |
 
-| Project | Path | What it is |
-|---|---|---|
-| **Jarvis** | [`projects/jarvis/`](./projects/jarvis) · [`Cap-Dylan/Jarvis`](https://github.com/Cap-Dylan/Jarvis) | Multi-zone LLM agent. Tool-use loop, model routing (3B + 14B), eval harness, CI'd with smoke tests. |
-| **infra-stack** | [`projects/infra-stack/`](./projects/infra-stack) | Docker-Composed observability stack: AdGuard Home (DNS sinkhole + threat filtering), Prometheus (15s scrape, 30-day retention, all 4 nodes), Grafana dashboards. |
-| **frigate-nvr** | [`projects/frigate-nvr/`](./projects/frigate-nvr) | Local CV pipeline. Tapo C121 RTSP → Frigate w/ Intel QuickSync hardware decode → MQTT → Home Assistant. Detection events live. |
-| **ollama-api-wrapper** | [`projects/ollama-api-wrapper/`](./projects/ollama-api-wrapper) | FastAPI service exposing local LLM inference: `/health`, `/ask`, `/summarize`. Reused by other tools across the lab. |
-| **Tort Agent** | [`Cap-Dylan/tort-agent`](https://github.com/Cap-Dylan/tort-agent) | Local LLM workflow assistant. Native tool calling on Qwen3.6 35B; integrates with Canvas LMS, Apple Notes, Obsidian. |
-
-CI runs on every push to `main` — see [`.github/workflows/ci.yml`](./.github/workflows/ci.yml). Smoke tests assert on business logic (brightness boundaries, Flask routes), not just syntax.
-
----
-
-## Hardware
-
-| Device | Role | Specs |
-|---|---|---|
-| Custom Tower | Heavy ML training / large-model inference | i7-14700 + RTX 4090 24GB · 128GB DDR5 |
-| MSI GE76 Raider | 24/7 local inference (headless) | i7-9750H + RTX 2060 8GB · 32GB · Ubuntu Server 24.04 |
-| UGREEN NASync DXP2800 | NAS / app server | Intel N100 · 8GB DDR5 · UGOS Pro |
-| Lenovo IdeaPad 1 | Home Assistant (bare-metal) | Celeron N4500 · 36GB |
-| ASUS Vivobook 16 | infra-stack host (headless) | i5-1135G7 · 8GB · Ubuntu 24.04 |
-| MacBook Pro 14" | Daily driver / Tort Agent host | M4 Pro · 24GB unified |
-| Surface Go 3 | Planned HA kiosk | Pentium Gold 6500Y · 4GB |
-
-Networking: TP-Link BE3600 (Wi-Fi 7, 2.5G) · Tailscale mesh across all nodes (no public ports exposed) · segmented IoT SSID · DNS routes through AdGuard.
-
-Full hardware + networking writeup: [`docs/infrastructure.md`](./docs/infrastructure.md).
+**Networking**: TP-Link BE3600 Wi-Fi 7 (2.5G WAN/LAN), Deco W6000 mesh (wired Cat6 backhaul), 2.5G + 1G switches, all critical nodes UPS-backed. Tailscale mesh VPN for zero-config remote access.
 
 ---
 
-## Design principles
+## Projects Running on This Infrastructure
 
-- **Privacy first** — all inference is local. Cloud LLMs reserved only for hard reasoning where they're worth it.
-- **Right-sized hardware** — N100 / IdeaPad for 24/7 services, RTX 4090 only when training or running large models.
-- **Repurposed where possible** — old laptops as headless servers. Sustainability + cost.
-- **Observable** — everything that matters has metrics scraped and a Grafana panel. Failures alert to Matrix.
-- **Reproducible** — every project under `projects/` is `docker compose up -d` plus a `.env`. No snowflake servers.
+### [Jarvis](https://github.com/Cap-Dylan/Jarvis) — Agentic Smart Home
+
+Multi-zone smart home agent with two input paths (motion-triggered automation via Frigate + conversational control via Matrix) converging on a shared decision log and Home Assistant backend. Model routing validated by committed eval harnesses: `llama3.2:3b` for color-temperature decisions (~800ms, 100% JSON compliance) and `Qwen3.5:9b` for chat + tool calls (~88% accuracy). Dockerized with CI/CD via GitHub Actions, Prometheus + Grafana alerting into Matrix.
+
+### [Jarvis Control Center](https://github.com/Cap-Dylan/control-center) — Operator Console
+
+Full-stack ops console for real-time decision inspection, Home Assistant control, and system monitoring. FastAPI backend (Python 3.14, Pydantic v2) with 8 live endpoints serving timeline data from `decisions.jsonl`, Canvas LMS integration for academic tracking, HA REST API for direct light/automation control, and Prometheus/Node Exporter for infrastructure alerting. Vanilla React frontend (Babel-in-browser, no build step) with a Linear/Vercel-style dark dense UI. Five of six phases complete; final phase is Vivobook deployment.
+
+### [Tort Agent](https://github.com/Cap-Dylan/tort-agent) — Local Study Assistant
+
+Tool-calling LLM agent running `qwen3.6:35b-a3b` on the tower (RTX 4090). Six tools against an Obsidian vault: morning briefs (weather + Canvas assignments + per-class note refreshers), Apple Notes PDF export via AppleScript, handwritten note OCR (PyMuPDF + Apple Vision), atomic concept extraction with deduplication, weekly course summaries, and directory navigation. Two-mode interface — Socratic persona chat and tool-using study assistant.
+
+### [Vault Sync](https://github.com/Cap-Dylan/vault-sync) — Local-First Obsidian Sync
+
+Syncthing-based vault synchronization across Mac, Windows, and UGREEN NAS with automated Apple Notes export via launchd. Zero cloud subscriptions.
+
+### [Kiosk Dashboard](https://github.com/Cap-Dylan/kiosk-dashboard) — Ambient Display
+
+Vanilla HTML + Node.js proxy deployed to the ASUS Vivobook via SCP and systemd. Ambient display showing time, weather, Ollama model status (proxied from the tower), and quick links. Currently on standby — functionality superseded by the Control Center.
 
 ---
 
-## License
+## Model Routing & Evaluation
 
-MIT — see [LICENSE](./LICENSE).
+Model assignments are driven by evaluation data, not assumptions. The homelab runs multiple models across nodes, each selected for a specific workload shape:
+
+| Model | Node | Use Case | Validated By |
+|-------|------|----------|-------------|
+| `llama3.2:3b` | MSI (RTX 2060) | Jarvis color-temp decisions | `eval_colortemp.py` — 100% JSON compliance, <1s latency |
+| `Qwen3.5:9b` | MSI (RTX 2060) | Jarvis chat + tool calls | `eval_models.py` — 88% accuracy across 8 scenarios |
+| `Qwen3.5:9b` | MSI (RTX 2060) | General light inference | `eval_harness.py` — 22 tok/s, 1.0 keyword recall, 0.85 OCR quality (10 trials) |
+| `qwen3.6:35b-a3b` | Tower (RTX 4090) | Tort Agent tool-use loop | Native tool calling, full model fits in 24GB VRAM |
+| `qwen3.5:9b` | MacBook (M4 Pro) | Tort Agent local dev | Lighter-weight testing during development |
+
+Eval harnesses and results are committed to their respective repositories.
+
+---
+
+## Infrastructure Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Bare-metal HAOS on low-power Celeron | Maximum stability, ~10W idle, no hypervisor overhead |
+| MSI GE76 TDP-capped at ~60% | Efficient 24/7 inference on RTX 2060 without thermal throttling |
+| UGREEN NAS over Proxmox rebuild | Intel N100 with Docker, lower maintenance than retired HP Z400 |
+| Syncthing over cloud sync | End-to-end encrypted, no subscriptions, NAS as always-on hub |
+| Model routing (small + large) | Deterministic tasks get fast small models; open-ended reasoning gets capable larger models |
+| Tailscale mesh | Zero-config remote access, critical for multi-site operation post-relocation |
+
+---
+
+## Roadmap
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 10 | CV fine-tuning pipeline: Frigate snapshots → MobileNetV3/EfficientNet-Lite, QLoRA on 4090, ONNX export, containerized inference microservice | Planned |
+| 11 | Agent v2: Planner/Executor/Validator architecture for multi-step task planning | Planned |
+| 12 | Portfolio polish and job prep | In progress |
+
+**Flagged automation items**: LLM log anomaly detection, Frigate snapshot → JSONL training dataset pipeline, automated homelab changelog from GitHub commits.
+
+---
+
+## Detailed Infrastructure
+
+See [docs/infrastructure.md](docs/infrastructure.md) for the full hardware inventory, networking topology, software stack, and engineering decision log.
